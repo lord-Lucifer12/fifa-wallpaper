@@ -37,24 +37,46 @@
   }
 
   /* === BACKGROUND === */
-  .bg-layer {
+  .bg-stadium {
     position: fixed; inset: 0; z-index: 0;
+    background-image: url('https://images.unsplash.com/photo-1508098682722-e99c43a406b2?w=800&q=80');
+    background-size: cover;
+    background-position: center top;
+    filter: brightness(0.22) saturate(1.2);
+  }
+
+  .bg-layer {
+    position: fixed; inset: 0; z-index: 1;
     background:
-      radial-gradient(ellipse 80% 50% at 50% -10%, rgba(201,168,76,0.13) 0%, transparent 70%),
-      radial-gradient(ellipse 60% 40% at 100% 100%, rgba(58,134,255,0.08) 0%, transparent 60%),
-      radial-gradient(ellipse 50% 60% at 0% 70%, rgba(230,57,70,0.06) 0%, transparent 60%);
+      linear-gradient(180deg, rgba(7,10,18,0.55) 0%, rgba(7,10,18,0.2) 30%, rgba(7,10,18,0.6) 70%, rgba(7,10,18,0.97) 100%),
+      radial-gradient(ellipse 80% 40% at 50% 0%, rgba(201,168,76,0.18) 0%, transparent 70%),
+      radial-gradient(ellipse 50% 30% at 100% 100%, rgba(58,134,255,0.10) 0%, transparent 60%);
   }
 
   .pitch-lines {
-    position: fixed; inset: 0; z-index: 0; opacity: 0.04;
+    position: fixed; inset: 0; z-index: 1; opacity: 0.035;
     background-image:
-      repeating-linear-gradient(0deg, transparent, transparent 59px, rgba(255,255,255,0.6) 60px),
-      repeating-linear-gradient(90deg, transparent, transparent 59px, rgba(255,255,255,0.6) 60px);
+      repeating-linear-gradient(0deg, transparent, transparent 59px, rgba(255,255,255,0.8) 60px),
+      repeating-linear-gradient(90deg, transparent, transparent 59px, rgba(255,255,255,0.8) 60px);
+  }
+
+  .ball-watermark {
+    position: fixed; z-index: 1;
+    font-size: 320px; line-height: 1;
+    opacity: 0.04;
+    top: -60px; right: -80px;
+    pointer-events: none;
+    animation: slowSpin 60s linear infinite;
+  }
+
+  @keyframes slowSpin {
+    from { transform: rotate(0deg); }
+    to   { transform: rotate(360deg); }
   }
 
   /* === MAIN LAYOUT === */
   .wallpaper {
-    position: relative; z-index: 1;
+    position: relative; z-index: 3;
     display: flex; flex-direction: column;
     height: 100vh;
     padding: 52px 22px 28px;
@@ -451,8 +473,11 @@
 </head>
 <body>
 
+<div class="bg-stadium"></div>
 <div class="bg-layer"></div>
 <div class="pitch-lines"></div>
+<div class="ball-watermark">⚽</div>
+<div id="liveBgTint" style="position:fixed;inset:0;z-index:2;pointer-events:none;transition:background 1.5s ease;"></div>
 
 <!-- SETUP OVERLAY -->
 <div class="setup-overlay" id="setupOverlay">
@@ -463,8 +488,9 @@
       <a href="https://www.football-data.org" target="_blank">football-data.org</a> to get live scores.<br><br>
       Free tier: 10 req/min — perfect for this wallpaper.
     </div>
-    <input class="setup-input" id="apiKeyInput" placeholder="Paste your API key here..." type="text"/>
-    <button class="setup-btn" onclick="saveKey()">ACTIVATE WALLPAPER</button>
+    <input class="setup-input" id="apiKeyInput" placeholder="Paste your API key here..." type="text" oninput="checkKey(this.value)"/>
+    <button class="setup-btn" id="activateBtn" onclick="saveKey()" style="opacity:0.5;pointer-events:none;">ACTIVATE WALLPAPER</button>
+    <div id="keyStatus" style="text-align:center;font-size:11px;color:#e63946;margin-top:6px;min-height:16px;"></div>
     <div class="setup-skip" onclick="skipSetup()">Use demo mode (no live scores)</div>
   </div>
 </div>
@@ -479,7 +505,11 @@
       <div class="title">WORLD<br>CUP <span>2026</span></div>
     </div>
     <div class="header-badge">
-      <div class="trophy-icon">🏆</div>
+      <img src="https://upload.wikimedia.org/wikipedia/en/thumb/5/5e/2026_FIFA_World_Cup_logo.svg/200px-2026_FIFA_World_Cup_logo.svg.png"
+           alt="FIFA WC 2026"
+           style="width:64px;height:auto;opacity:0.92;filter:drop-shadow(0 0 10px rgba(201,168,76,0.5));"
+           onerror="this.style.display='none';document.getElementById('fallbackTrophy').style.display='block'"/>
+      <div id="fallbackTrophy" style="display:none;font-size:28px;">🏆</div>
       <div class="header-date" id="headerDate"></div>
     </div>
   </div>
@@ -536,8 +566,8 @@ const TOTAL_MATCHES = 104;
 
 // ---- DEMO DATA (used without API key) ----
 const DEMO_LIVE = {
-  homeTeam: { name: 'Brazil', flag: '🇧🇷' },
-  awayTeam: { name: 'Morocco', flag: '🇲🇦' },
+  homeTeam: { name: 'Brazil', shortName: 'Brazil', flag: '🇧🇷' },
+  awayTeam: { name: 'Argentina', shortName: 'Argentina', flag: '🇦🇷' },
   score: { fullTime: { home: 2, away: 1 } },
   minute: 72,
   status: 'IN_PLAY'
@@ -551,8 +581,19 @@ const DEMO_TODAY = [
 
 const DEMO_PROGRESS = 42;
 
-let apiKey = localStorage.getItem('fdApiKey') || '';
+let apiKey = localStorage.getItem('fdApiKey') || '27be28a0ba794d9482e3d434dc7807b4';
 let demoMode = false;
+
+function checkKey(val) {
+  const btn = document.getElementById('activateBtn');
+  if (val && val.trim().length > 5) {
+    btn.style.opacity = '1';
+    btn.style.pointerEvents = 'auto';
+  } else {
+    btn.style.opacity = '0.5';
+    btn.style.pointerEvents = 'none';
+  }
+}
 
 function saveKey() {
   const val = document.getElementById('apiKeyInput').value.trim();
@@ -609,27 +650,55 @@ async function fetchProgress() {
   } catch(e) { return null; }
 }
 
+function getTeamData(name) {
+  return TEAM_IMG[name] || { img: null, kit: '#888888,#444444' };
+}
+
 function renderLive(match) {
   const el = document.getElementById('liveContainer');
   if (!match) {
     el.innerHTML = `<div class="no-live">No matches in play right now</div>`;
+    // reset bg tint
+    document.getElementById('liveBgTint').style.background = 'transparent';
     return;
   }
   const s = match.score.fullTime;
+  const hName = match.homeTeam.shortName || match.homeTeam.name;
+  const aName = match.awayTeam.shortName || match.awayTeam.name;
+  const hData = getTeamData(match.homeTeam.name);
+  const aData = getTeamData(match.awayTeam.name);
+  const hKit = hData.kit.split(',')[0];
+  const aKit = aData.kit.split(',')[0];
+
+  // Dynamic background tint based on team colors
+  document.getElementById('liveBgTint').style.background =
+    `linear-gradient(135deg, ${hKit}22 0%, transparent 50%, ${aKit}22 100%)`;
+
+  const hImgHtml = hData.img
+    ? `<img src="${hData.img}" alt="${hName}" style="width:52px;height:36px;object-fit:contain;border-radius:4px;filter:drop-shadow(0 2px 8px rgba(0,0,0,0.5));" onerror="this.outerHTML='<span style=\'font-size:28px\'>${match.homeTeam.flag||'🏳️'}</span>'">`
+    : `<span style="font-size:28px">${match.homeTeam.flag || '🏳️'}</span>`;
+
+  const aImgHtml = aData.img
+    ? `<img src="${aData.img}" alt="${aName}" style="width:52px;height:36px;object-fit:contain;border-radius:4px;filter:drop-shadow(0 2px 8px rgba(0,0,0,0.5));" onerror="this.outerHTML='<span style=\'font-size:28px\'>${match.awayTeam.flag||'🏳️'}</span>'">`
+    : `<span style="font-size:28px">${match.awayTeam.flag || '🏳️'}</span>`;
+
   el.innerHTML = `
-    <div class="live-card">
+    <div class="live-card" style="border-color:${hKit}55;">
+      <div style="position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,${hKit},${aKit});border-radius:16px 16px 0 0;"></div>
       <div class="live-matchup">
         <div class="live-team">
-          <div class="live-flag">${match.homeTeam.flag || '🏳️'}</div>
-          <div class="live-name">${match.homeTeam.shortName || match.homeTeam.name}</div>
+          <div style="width:56px;height:40px;display:flex;align-items:center;justify-content:center;">${hImgHtml}</div>
+          <div style="width:8px;height:8px;border-radius:50%;background:${hKit};margin:2px auto;box-shadow:0 0 6px ${hKit};"></div>
+          <div class="live-name">${hName}</div>
         </div>
         <div class="live-score-block">
           <div class="live-score">${s.home ?? 0} — ${s.away ?? 0}</div>
           <div class="live-minute">${match.minute || ''}′ LIVE</div>
         </div>
         <div class="live-team">
-          <div class="live-flag">${match.awayTeam.flag || '🏳️'}</div>
-          <div class="live-name">${match.awayTeam.shortName || match.awayTeam.name}</div>
+          <div style="width:56px;height:40px;display:flex;align-items:center;justify-content:center;">${aImgHtml}</div>
+          <div style="width:8px;height:8px;border-radius:50%;background:${aKit};margin:2px auto;box-shadow:0 0 6px ${aKit};"></div>
+          <div class="live-name">${aName}</div>
         </div>
       </div>
     </div>`;
@@ -694,6 +763,44 @@ function updateDateHeader() {
   document.getElementById('headerDate').textContent = now.toLocaleDateString('en-GB', { day:'numeric', month:'short' }).toUpperCase();
 }
 
+const TEAM_IMG = {
+  'Brazil':      { img:'https://upload.wikimedia.org/wikipedia/en/0/05/Flag_of_Brazil.svg',      kit:'#FCD116,#009C3B' },
+  'Morocco':     { img:'https://upload.wikimedia.org/wikipedia/commons/2/2c/Flag_of_Morocco.svg', kit:'#C1272D,#006233' },
+  'Argentina':   { img:'https://upload.wikimedia.org/wikipedia/commons/1/1a/Flag_of_Argentina.svg',kit:'#74ACDF,#FFFFFF' },
+  'Germany':     { img:'https://upload.wikimedia.org/wikipedia/en/b/ba/Flag_of_Germany.svg',      kit:'#FFFFFF,#000000' },
+  'France':      { img:'https://upload.wikimedia.org/wikipedia/en/c/c3/Flag_of_France.svg',       kit:'#002395,#ED2939' },
+  'England':     { img:'https://upload.wikimedia.org/wikipedia/en/b/be/Flag_of_England.svg',      kit:'#FFFFFF,#CF081F' },
+  'Spain':       { img:'https://upload.wikimedia.org/wikipedia/en/9/9a/Flag_of_Spain.svg',        kit:'#AA151B,#F1BF00' },
+  'Portugal':    { img:'https://upload.wikimedia.org/wikipedia/commons/5/5c/Flag_of_Portugal.svg',kit:'#006600,#FF0000' },
+  'Netherlands': { img:'https://upload.wikimedia.org/wikipedia/commons/2/20/Flag_of_the_Netherlands.svg', kit:'#FF6600,#FFFFFF' },
+  'Japan':       { img:'https://upload.wikimedia.org/wikipedia/en/9/9e/Flag_of_Japan.svg',        kit:'#BC002D,#FFFFFF' },
+  'USA':         { img:'https://upload.wikimedia.org/wikipedia/en/a/a4/Flag_of_the_United_States.svg', kit:'#B22234,#3C3B6E' },
+  'Mexico':      { img:'https://upload.wikimedia.org/wikipedia/commons/f/fc/Flag_of_Mexico.svg',  kit:'#006847,#CE1126' },
+  'Canada':      { img:'https://upload.wikimedia.org/wikipedia/commons/d/d9/Flag_of_Canada_%28Pantone%29.svg', kit:'#FF0000,#FFFFFF' },
+  'Senegal':     { img:'https://upload.wikimedia.org/wikipedia/commons/f/fd/Flag_of_Senegal.svg', kit:'#00853F,#FDEF42' },
+  'Algeria':     { img:'https://upload.wikimedia.org/wikipedia/commons/7/77/Flag_of_Algeria.svg', kit:'#006233,#FFFFFF' },
+  'Croatia':     { img:'https://upload.wikimedia.org/wikipedia/commons/1/1b/Flag_of_Croatia.svg', kit:'#FF0000,#FFFFFF' },
+  'Belgium':     { img:'https://upload.wikimedia.org/wikipedia/commons/6/65/Flag_of_Belgium.svg', kit:'#000000,#FF0000' },
+  'Uruguay':     { img:'https://upload.wikimedia.org/wikipedia/commons/f/fe/Flag_of_Uruguay.svg', kit:'#5EB6E4,#FFFFFF' },
+  'Switzerland': { img:'https://upload.wikimedia.org/wikipedia/commons/f/f3/Flag_of_Switzerland.svg', kit:'#FF0000,#FFFFFF' },
+  'Australia':   { img:'https://upload.wikimedia.org/wikipedia/commons/b/b9/Flag_of_Australia.svg', kit:'#00008B,#FFD700' },
+  'South Korea': { img:'https://upload.wikimedia.org/wikipedia/commons/0/09/Flag_of_South_Korea.svg', kit:'#C60C30,#FFFFFF' },
+  'Colombia':    { img:'https://upload.wikimedia.org/wikipedia/commons/2/21/Flag_of_Colombia.svg', kit:'#FCD116,#003087' },
+  'Italy':       { img:'https://upload.wikimedia.org/wikipedia/en/0/03/Flag_of_Italy.svg',        kit:'#003399,#FFFFFF' },
+  'Ecuador':     { img:'https://upload.wikimedia.org/wikipedia/commons/e/e8/Flag_of_Ecuador.svg', kit:'#FFD100,#003087' },
+  'Sweden':      { img:'https://upload.wikimedia.org/wikipedia/en/4/4c/Flag_of_Sweden.svg',       kit:'#006AA7,#FECC02' },
+  'South Africa':{ img:'https://upload.wikimedia.org/wikipedia/commons/a/af/Flag_of_South_Africa.svg', kit:'#007A4D,#FFB81C' },
+  'Turkey':      { img:'https://upload.wikimedia.org/wikipedia/commons/b/b4/Flag_of_Turkey.svg',  kit:'#E30A17,#FFFFFF' },
+  'Ghana':       { img:'https://upload.wikimedia.org/wikipedia/commons/1/19/Flag_of_Ghana.svg',   kit:'#006B3F,#FCD116' },
+  'Denmark':     { img:'https://upload.wikimedia.org/wikipedia/commons/9/9c/Flag_of_Denmark.svg', kit:'#C60C30,#FFFFFF' },
+  'Poland':      { img:'https://upload.wikimedia.org/wikipedia/en/1/12/Flag_of_Poland.svg',       kit:'#FFFFFF,#DC143C' },
+  'Qatar':       { img:'https://upload.wikimedia.org/wikipedia/commons/6/65/Flag_of_Qatar.svg',   kit:'#8D1B3D,#FFFFFF' },
+  'Saudi Arabia':{ img:'https://upload.wikimedia.org/wikipedia/commons/0/0d/Flag_of_Saudi_Arabia.svg', kit:'#006C35,#FFFFFF' },
+  'Iran':        { img:'https://upload.wikimedia.org/wikipedia/commons/c/ca/Flag_of_Iran.svg',    kit:'#239F40,#FFFFFF' },
+  'Serbia':      { img:'https://upload.wikimedia.org/wikipedia/commons/f/ff/Flag_of_Serbia.svg',  kit:'#C6363C,#FFFFFF' },
+  'Costa Rica':  { img:'https://upload.wikimedia.org/wikipedia/commons/b/bc/Flag_of_Costa_Rica_%28state%29.svg', kit:'#002B7F,#CE1126' },
+};
+
 const FLAG_MAP = {
   'Brazil':'🇧🇷','Morocco':'🇲🇦','Argentina':'🇦🇷','Germany':'🇩🇪',
   'France':'🇫🇷','England':'🏴󠁧󠁢󠁥󠁮󠁧󠁿','Spain':'🇪🇸','Portugal':'🇵🇹',
@@ -746,7 +853,7 @@ async function update() {
 }
 
 // Check if key already saved
-if (apiKey) {
+if (true) { // API key hardcoded
   startApp();
 } else {
   document.getElementById('setupOverlay').style.display = 'flex';
